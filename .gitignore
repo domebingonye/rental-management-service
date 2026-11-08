@@ -1,0 +1,8 @@
+# Generated when the app is run from IntelliJ (working directory = repo root)
+logs/
+target/
+
+# IDE / tooling
+.idea/
+*.iml
+.qodo/
