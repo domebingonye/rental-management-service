@@ -18,10 +18,6 @@ public class FundWalletRequest {
     @Digits(integer = 17, fraction = 2, message = "Amount can have at most 2 decimal places.")
     private BigDecimal amount;
 
-    /**
-     * Optional client-generated idempotency key. Sending the same reference again (e.g. after a timeout)
-     * returns the original transaction instead of crediting the wallet twice.
-     */
     @Size(min = 8, max = 64, message = "Reference must be 8-64 characters.")
     @Pattern(regexp = "^[A-Za-z0-9_-]+$", message = "Reference may only contain letters, digits, '_' and '-'.")
     private String reference;

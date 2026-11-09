@@ -7,7 +7,6 @@ import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 
-/** HMAC-SHA512 signing for webhooks (same scheme Paystack uses for x-paystack-signature). */
 public final class HmacUtil {
     private static final String ALGORITHM = "HmacSHA512";
 
@@ -23,7 +22,6 @@ public final class HmacUtil {
         }
     }
 
-    /** Constant-time comparison so the signature cannot be guessed byte by byte from response timings. */
     public static boolean verify(String payload, String signature, String secret) {
         if (payload == null || signature == null || signature.isBlank()) return false;
         byte[] expected = sign(payload, secret).getBytes(StandardCharsets.UTF_8);
@@ -31,7 +29,6 @@ public final class HmacUtil {
         return MessageDigest.isEqual(expected, actual);
     }
 
-    /** Constant-time equality for API keys. */
     public static boolean constantTimeEquals(String a, String b) {
         if (a == null || b == null) return false;
         return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));

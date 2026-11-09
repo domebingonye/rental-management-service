@@ -10,11 +10,6 @@ import lombok.experimental.Accessors;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * MOCK BANK / PROVIDER SIDE. Stands in for the records a real bank and payment provider would keep
- * about a NIP transfer. Our application never reads this table directly: it only learns about these
- * transfers through the signed webhook and the requery API, exactly as it would with a real provider.
- */
 @Entity
 @Getter
 @Setter
@@ -23,7 +18,6 @@ import java.time.LocalDateTime;
 @Table(name = "MOCK_BANK_TRANSFERS")
 public class MockBankTransferEntity extends AuditModel {
 
-    /** NIP-style 30-digit session id: bank code (6) + yyMMddHHmmss (12) + random (12). */
     @Column(name = "SESSION_ID", nullable = false, unique = true, length = 30)
     private String sessionId;
 

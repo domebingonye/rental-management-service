@@ -5,7 +5,6 @@ import com._line.rentalservice.dto.WalletTransfer;
 import com._line.rentalservice.dto.request.WalletTransferRequest;
 import com._line.rentalservice.enums.AccountStatus;
 import com._line.rentalservice.enums.ResponseCodes;
-import com._line.rentalservice.enums.TransactionType;
 import com._line.rentalservice.enums.UserRoleType;
 import com._line.rentalservice.exception.RequestException;
 import com._line.rentalservice.model.MerchantProfileEntity;
@@ -31,7 +30,6 @@ public class WalletTransferService {
     private final MerchantProfileDaoService merchantProfileDaoService;
     private final WalletService walletService;
 
-    /** "Name enquiry": lets the customer confirm who they are paying before sending. */
     @Transactional(readOnly = true)
     public TransferRecipient lookupRecipient(String walletNumber) {
         WalletEntity wallet = findPayableMerchantWallet(walletNumber);
@@ -43,7 +41,6 @@ public class WalletTransferService {
 
     @Transactional
     public WalletTransfer transfer(String senderUsername, WalletTransferRequest request) {
-        // 1. Validate both parties (no locks yet).
         WalletEntity sender = walletDaoService.findByUsername(senderUsername)
                 .orElseThrow(() -> new RequestException(ResponseCodes.NOT_FOUND, "Wallet not found"));
         if (sender.getUser().getUserRoleType() != UserRoleType.CUSTOMER) {
@@ -61,16 +58,8 @@ public class WalletTransferService {
                 ? request.getReference()
                 : "TRF-" + UUID.randomUUID().toString().replace("-", "").toUpperCase();
 
-        // 2. Lock both wallets in a fixed order (lowest id first) to rule out deadlocks.
-        if (sender.getId() < recipient.getId()) {
-            walletDaoService.lockAndRefresh(sender);
-            walletDaoService.lockAndRefresh(recipient);
-        } else {
-            walletDaoService.lockAndRefresh(recipient);
-            walletDaoService.lockAndRefresh(sender);
-        }
+        walletService.lockInOrder(sender, recipient);
 
-        // 3. Idempotency, checked under the locks so a retry racing the original cannot pay twice.
         var existing = walletTransferDaoService.findByReference(reference);
         if (existing.isPresent()) {
             if (!existing.get().getSenderWallet().getId().equals(sender.getId())) {
@@ -80,14 +69,12 @@ public class WalletTransferService {
             return WalletTransferDaoService.toDto(existing.get(), senderUsername, sender.getBalance());
         }
 
-        // 4. Move the money. postEntry refuses a debit that would take the balance below zero,
-        //    which rolls back the whole transaction.
         String senderName = sender.getUser().getFirstName() + " " + sender.getUser().getSurname();
         String recipientName = merchantName(recipient.getUser());
         String note = StringUtils.hasText(request.getNarration()) ? " - " + request.getNarration().trim() : "";
 
-        walletService.postEntry(sender, TransactionType.DEBIT, request.getAmount(), reference + "-DR", "Payment to " + recipientName + note);
-        walletService.postEntry(recipient, TransactionType.CREDIT, request.getAmount(), reference + "-CR", "Payment from " + senderName + note);
+        walletService.moveFunds(sender, recipient, request.getAmount(), reference,
+                "Payment to " + recipientName + note, "Payment from " + senderName + note);
 
         WalletTransferEntity transfer = walletTransferDaoService.save(new WalletTransferEntity()
                 .setReference(reference)
@@ -110,7 +97,6 @@ public class WalletTransferService {
                 .map(t -> WalletTransferDaoService.toDto(t, username, null));
     }
 
-    /** Visible only to the sender and the recipient; anyone else gets 404 (not 403, to avoid confirming it exists). */
     @Transactional(readOnly = true)
     public WalletTransfer getTransfer(String username, String reference) {
         return walletTransferDaoService.findByReference(reference)
@@ -120,7 +106,6 @@ public class WalletTransferService {
                 .orElseThrow(() -> new RequestException(ResponseCodes.NOT_FOUND, "Transfer not found"));
     }
 
-    /** Only approved, active merchants can be paid. Same message for every failure: don't leak who exists. */
     private WalletEntity findPayableMerchantWallet(String walletNumber) {
         return walletDaoService.findByWalletNumber(walletNumber)
                 .filter(w -> w.getUser().getUserRoleType() == UserRoleType.MERCHANT)

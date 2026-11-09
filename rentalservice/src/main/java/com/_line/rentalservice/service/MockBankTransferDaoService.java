@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
-/** MOCK BANK / PROVIDER SIDE. Persistence helpers for MOCK_BANK_TRANSFERS and mapping to the provider's API shape. */
 @Service
 @RequiredArgsConstructor
 public class MockBankTransferDaoService {

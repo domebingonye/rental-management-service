@@ -20,7 +20,6 @@ public class InboundTransferController {
 
     private final InboundTransferService inboundTransferService;
 
-    /** Bank transfers into the caller's virtual account, newest first, with their verification status. */
     @GetMapping
     @PreAuthorize(WALLET_HOLDERS)
     public ResponseEntity<Page<InboundTransfer>> myTransfers(Authentication auth,
@@ -29,7 +28,6 @@ public class InboundTransferController {
         return ResponseEntity.ok(inboundTransferService.getMyTransfers(auth.getName(), page, size));
     }
 
-    /** Re-verify a transfer stuck in PENDING_VERIFICATION (e.g. provider was down when the webhook came). */
     @PostMapping("/{sessionId}/requery")
     @PreAuthorize(STAFF_ONLY)
     public ResponseEntity<InboundTransfer> requery(@PathVariable String sessionId) {

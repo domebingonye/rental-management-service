@@ -35,13 +35,6 @@ public class SecurityConfig {
     private final AuthTokenFilter authTokenFilter;
     private final PasswordEncoder passwordEncoder;
 
-    /**
-     * Username/password provider backed by SYS_USERS.
-     * <p>
-     * Spring's default checks "disabled/locked" BEFORE verifying the password, which would tell an
-     * attacker who only knows a username that the account is pending or suspended. We move the
-     * status checks after the password check so only the real owner learns the account state.
-     */
     @Bean("userAuthProvider")
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
@@ -71,11 +64,8 @@ public class SecurityConfig {
                                 "/api/v1/authentication/user",
                                 "/api/v1/authentication/signup/customer",
                                 "/api/v1/authentication/signup/merchant",
-                                // Called by the payment provider; authenticated by HMAC signature, not JWT.
                                 "/api/v1/webhooks/**",
-                                // Simulated external bank/provider. Its requery API checks its own secret key.
                                 "/mock-bank/**").permitAll()
-                        // Coarse role gates per area; fine-grained rules use @PreAuthorize on the controller.
                         .requestMatchers("/api/v1/staff/**").hasAuthority(UserRoleType.Code.ROLE_STAFF)
                         .requestMatchers("/api/v1/merchant/**").hasAuthority(UserRoleType.Code.ROLE_MERCHANT)
                         .requestMatchers("/api/v1/customer/**").hasAuthority(UserRoleType.Code.ROLE_CUSTOMER)

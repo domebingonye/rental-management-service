@@ -29,23 +29,9 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-/**
- * MOCK BANK / PROVIDER SIDE — not part of the rental platform.
- * <p>
- * Plays the customer's commercial bank, the NIP switch and the virtual-account provider in one:
- * <ol>
- *   <li>name enquiry on the destination account,</li>
- *   <li>accepts the transfer as PENDING and returns a session id,</li>
- *   <li>settles it a moment later (SUCCESSFUL, or FAILED for source accounts ending in 0000),</li>
- *   <li>POSTs an HMAC-signed webhook to the platform, retrying with exponential back-off,</li>
- *   <li>answers requery calls authenticated with the provider secret key.</li>
- * </ol>
- * It talks to the platform only over HTTP, like a real provider would.
- */
 @Service
 @Slf4j
 public class MockBankService {
-    /** Source accounts ending with this always fail with "Insufficient funds" (test hook). */
     private static final String FAILING_ACCOUNT_SUFFIX = "0000";
     private static final String SENDER_BANK_CODE = "999058";
     private static final DateTimeFormatter SESSION_TIME = DateTimeFormatter.ofPattern("yyMMddHHmmss");
@@ -71,9 +57,6 @@ public class MockBankService {
         this.scheduler = scheduler;
     }
 
-    // ---------------------------------------------------------------- public API of the "bank"
-
-    /** NIP name enquiry: confirms the destination account exists and returns its name. */
     public NameEnquiryResponse nameEnquiry(String accountNumber, String bankCode) {
         VirtualAccountEntity account = lookupDestination(accountNumber, bankCode);
         return NameEnquiryResponse.builder()
@@ -84,7 +67,6 @@ public class MockBankService {
                 .build();
     }
 
-    /** Customer sends money from their commercial bank. Accepted as PENDING; settles asynchronously. */
     public ProviderTransaction initiateTransfer(BankTransferRequest request) {
         VirtualAccountEntity destination = lookupDestination(request.getDestinationAccountNumber(), request.getDestinationBankCode());
 
@@ -109,7 +91,6 @@ public class MockBankService {
         return MockBankTransferDaoService.toProviderTransaction(transfer);
     }
 
-    /** Requery API. Requires "Authorization: Bearer &lt;provider secret key&gt;". */
     public ProviderTransaction getTransaction(String authorizationHeader, String sessionId) {
         String key = authorizationHeader != null && authorizationHeader.startsWith(ApplicationConstants.BEARER_PREFIX)
                 ? authorizationHeader.substring(ApplicationConstants.BEARER_PREFIX.length()).trim() : null;
@@ -121,14 +102,11 @@ public class MockBankService {
                 .orElseThrow(() -> new RequestException(ResponseCodes.NOT_FOUND, "Transaction not found"));
     }
 
-    /** Lets the customer check their transfer from the bank side (no secret key; session id is the receipt). */
     public ProviderTransaction getTransferReceipt(String sessionId) {
         return mockBankTransferDaoService.findBySessionId(sessionId)
                 .map(MockBankTransferDaoService::toProviderTransaction)
                 .orElseThrow(() -> new RequestException(ResponseCodes.NOT_FOUND, "Transaction not found"));
     }
-
-    // ---------------------------------------------------------------- settlement + webhooks
 
     void settle(String sessionId) {
         try {
@@ -163,7 +141,6 @@ public class MockBankService {
                             ? ProviderWebhookEvent.TRANSFER_SUCCESSFUL : ProviderWebhookEvent.TRANSFER_FAILED)
                     .data(MockBankTransferDaoService.toProviderTransaction(transfer))
                     .build());
-            // Sign the exact bytes we send; the receiver must verify the raw body, not a re-serialised object.
             restClient.post()
                     .uri(webhookUrl())
                     .contentType(MediaType.APPLICATION_JSON)
@@ -190,9 +167,6 @@ public class MockBankService {
         }
     }
 
-    // ---------------------------------------------------------------- internals
-
-    /** Pretend NIBSS lookup. The mock bank is allowed this shortcut; the platform code never reads mock tables. */
     private VirtualAccountEntity lookupDestination(String accountNumber, String bankCode) {
         if (!propsReader.getVirtualAccountBankCode().equals(bankCode)) {
             throw new RequestException(ResponseCodes.BAD_REQUEST, "Unknown destination bank");

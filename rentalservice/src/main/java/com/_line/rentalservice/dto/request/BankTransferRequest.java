@@ -5,7 +5,6 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 
-/** What the customer fills in on their commercial bank's app to send money to their virtual account. */
 @Data
 public class BankTransferRequest {
     @NotBlank(message = "Source bank name is required.")

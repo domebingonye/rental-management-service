@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/** Fields every account needs. Used as-is for customer and staff onboarding. */
 @Data
 public class SignupRequest {
     @NotBlank(message = "Email is required.")

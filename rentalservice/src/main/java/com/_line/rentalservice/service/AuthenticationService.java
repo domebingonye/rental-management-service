@@ -27,10 +27,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Map;
 
-/**
- * Single login flow for every role (customer, merchant, staff), modelled on galaxy-auth-service:
- * authenticate with the DAO provider → load the account → issue a JWT carrying the role.
- */
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -64,8 +60,6 @@ public class AuthenticationService {
         SystemUserEntity user = systemUserDaoService.findByUsername(auth.getName())
                 .orElseThrow(() -> new RequestException(ResponseCodes.UNAUTHORIZED, INVALID_CREDENTIALS));
 
-        // Portal check: e.g. a customer's credentials must not open the staff back-office.
-        // Same error as a wrong password so the portal does not reveal which role an account has.
         if (login.getUserRoleType() != null && login.getUserRoleType() != user.getUserRoleType()) {
             log.info("Login for {} rejected: role {} used on {} portal", user.getUsername(), user.getUserRoleType(), login.getUserRoleType());
             throw new RequestException(ResponseCodes.UNAUTHORIZED, INVALID_CREDENTIALS);
@@ -84,7 +78,6 @@ public class AuthenticationService {
                 .build();
     }
 
-    /** Resolve the account behind a bearer token (used by front-ends and other services). */
     @Transactional(readOnly = true)
     public LoginResponse getUser(String authorizationHeader) {
         String token = JwtTokenUtil.stripBearer(authorizationHeader);
@@ -98,10 +91,6 @@ public class AuthenticationService {
         return toResponse(user, null).build();
     }
 
-    /**
-     * Tokens are stateless, so logout clears the server context and the client discards the token.
-     * (A production system would add a short-lived denylist or refresh-token revocation.)
-     */
     public void logout() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null) log.info("User {} logged out", auth.getName());

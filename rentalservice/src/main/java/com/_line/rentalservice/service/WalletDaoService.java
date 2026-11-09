@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import java.security.SecureRandom;
 import java.util.Optional;
 
-/** Persistence-facing helpers for WALLETS: lookups, locking, wallet-number generation and entity → DTO mapping. */
 @Service
 @RequiredArgsConstructor
 public class WalletDaoService {
@@ -28,29 +27,19 @@ public class WalletDaoService {
         return walletRepository.findByUserUsername(username);
     }
 
-    /** Takes a row lock held until the surrounding transaction commits. Must be called inside a transaction. */
     public Optional<WalletEntity> findByUsernameForUpdate(String username) {
         return walletRepository.findByUsernameForUpdate(username);
     }
 
-    /**
-     * Takes a row lock on a wallet that is ALREADY loaded in this transaction and re-reads it.
-     * <p>
-     * A plain "SELECT ... FOR UPDATE" query would hand back the instance already in the persistence
-     * context with the balance read <em>before</em> the lock — a lost-update bug. refresh() overwrites it
-     * with the locked, current row. Must be called inside a transaction.
-     */
     public WalletEntity lockAndRefresh(WalletEntity wallet) {
         entityManager.refresh(wallet, LockModeType.PESSIMISTIC_WRITE);
         return wallet;
     }
 
-    /** Includes the owning user. */
     public Optional<WalletEntity> findByWalletNumber(String walletNumber) {
         return walletRepository.findByWalletNumber(walletNumber);
     }
 
-    /** 10 digits, never starting with 0 so it survives being treated as a number by clients. */
     public String generateWalletNumber() {
         String number;
         do {

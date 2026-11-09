@@ -10,10 +10,6 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * A transfer as described by the payment provider. Used both as the webhook's "data" and as the
- * requery (GET /transactions/{sessionId}) response — only the requery response is trusted.
- */
 @Data
 @Builder
 @NoArgsConstructor

@@ -17,7 +17,6 @@ public interface WalletTransferRepository extends JpaRepository<WalletTransferEn
     @EntityGraph(attributePaths = {"senderWallet", "senderWallet.user", "recipientWallet", "recipientWallet.user"})
     Optional<WalletTransferEntity> findByReference(String reference);
 
-    /** Transfers the user sent or received, newest first. */
     @EntityGraph(attributePaths = {"senderWallet", "senderWallet.user", "recipientWallet", "recipientWallet.user"})
     @Query("select t from WalletTransferEntity t " +
             "where t.senderWallet.user.username = :username or t.recipientWallet.user.username = :username " +

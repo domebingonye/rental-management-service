@@ -13,7 +13,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-/** The caller's own wallet. The wallet is always resolved from the token, never from a path parameter. */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/wallet")

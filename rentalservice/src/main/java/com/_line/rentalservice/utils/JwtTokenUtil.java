@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
-/** Issues and validates HMAC-signed access tokens. Same role as galaxy-auth-service's JwtTokenUtil, on the jjwt 0.12 API. */
 @Component
 @Slf4j
 public class JwtTokenUtil {
@@ -25,7 +24,6 @@ public class JwtTokenUtil {
 
     public JwtTokenUtil(PropsReader propsReader) {
         this.propsReader = propsReader;
-        // Fails fast at startup (WeakKeyException) if the secret is shorter than 256 bits.
         this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(propsReader.getJwtSecret()));
     }
 
@@ -41,7 +39,6 @@ public class JwtTokenUtil {
                 .compact();
     }
 
-    /** Returns the claims if the token is well-formed, correctly signed, from our issuer and unexpired. */
     public Optional<Claims> parseAndValidate(String token) {
         try {
             return Optional.of(Jwts.parser()
@@ -68,7 +65,6 @@ public class JwtTokenUtil {
         return getClaimFromToken(token, Claims::getSubject);
     }
 
-    /** Strips the "Bearer " prefix from an Authorization header value, or returns null. */
     public static String stripBearer(String headerValue) {
         if (headerValue != null && headerValue.startsWith(ApplicationConstants.BEARER_PREFIX)) {
             String token = headerValue.substring(ApplicationConstants.BEARER_PREFIX.length()).trim();

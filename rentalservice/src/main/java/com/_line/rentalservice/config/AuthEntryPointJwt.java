@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Returns a JSON 401 when a protected endpoint is called without a valid token. */
 @Component
 @Slf4j
 @RequiredArgsConstructor

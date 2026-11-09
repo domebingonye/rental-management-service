@@ -24,7 +24,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.UUID;
 
-/** Wallet business rules. All persistence goes through {@link WalletDaoService} / {@link WalletTransactionDaoService}. */
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -33,10 +32,6 @@ public class WalletService {
     private final WalletTransactionDaoService walletTransactionDaoService;
     private final PropsReader propsReader;
 
-    /**
-     * Called from onboarding. MANDATORY: it must join the sign-up transaction, so if creating the wallet
-     * fails the account is rolled back too — there is never a customer or merchant without a wallet.
-     */
     @Transactional(propagation = Propagation.MANDATORY)
     public WalletEntity createWallet(SystemUserEntity user) {
         if (user.getUserRoleType() == UserRoleType.STAFF) {
@@ -64,12 +59,6 @@ public class WalletService {
                 .map(WalletTransactionDaoService::toDto);
     }
 
-    /**
-     * Credits the caller's wallet.
-     * <p>
-     * In production this is triggered by a verified payment-gateway webhook (e.g. Paystack/Flutterwave),
-     * not directly by the customer; here the gateway step is simulated so the ledger logic can be shown.
-     */
     @Transactional
     public WalletTransaction fundWallet(String username, FundWalletRequest request) {
         String reference = StringUtils.hasText(request.getReference())
@@ -79,17 +68,11 @@ public class WalletService {
         return credit(username, request.getAmount(), reference, narration);
     }
 
-    /**
-     * The single place a wallet is credited (card funding, virtual-account transfers, …).
-     * Idempotent on {@code reference}: the same reference for the same wallet returns the original entry.
-     */
     @Transactional
     public WalletTransaction credit(String username, BigDecimal requestedAmount, String reference, String narration) {
-        // 1. Lock the wallet row first. Every balance change for this wallet now queues behind us.
         WalletEntity wallet = walletDaoService.findByUsernameForUpdate(username)
                 .orElseThrow(() -> new RequestException(ResponseCodes.NOT_FOUND, "Wallet not found"));
 
-        // 2. Idempotency, checked under the lock so two identical retries cannot both pass.
         var existing = walletTransactionDaoService.findByReference(reference);
         if (existing.isPresent()) {
             if (!existing.get().getWallet().getId().equals(wallet.getId())) {
@@ -99,14 +82,9 @@ public class WalletService {
             return WalletTransactionDaoService.toDto(existing.get());
         }
 
-        // 3. Apply the credit and write the ledger entry in the same transaction.
         return WalletTransactionDaoService.toDto(postEntry(wallet, TransactionType.CREDIT, requestedAmount, reference, narration));
     }
 
-    /**
-     * Applies one ledger entry to a wallet the caller has ALREADY LOCKED, in the caller's transaction.
-     * This is the only code that changes a balance. A debit never takes a wallet below zero.
-     */
     @Transactional(propagation = Propagation.MANDATORY)
     public WalletTransactionEntity postEntry(WalletEntity lockedWallet, TransactionType type, BigDecimal requestedAmount,
                                             String reference, String narration) {
@@ -131,6 +109,27 @@ public class WalletService {
                 type == TransactionType.CREDIT ? "credited with" : "debited", amount, lockedWallet.getCurrency(),
                 reference, before, after);
         return tx;
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockInOrder(WalletEntity a, WalletEntity b) {
+        WalletEntity first = a.getId() < b.getId() ? a : b;
+        WalletEntity second = first == a ? b : a;
+        walletDaoService.lockAndRefresh(first);
+        walletDaoService.lockAndRefresh(second);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void moveFunds(WalletEntity lockedPayer, WalletEntity lockedPayee, BigDecimal amount, String reference,
+                          String debitNarration, String creditNarration) {
+        if (lockedPayer.getId().equals(lockedPayee.getId())) {
+            throw new RequestException(ResponseCodes.BAD_REQUEST, "Payer and payee wallets must differ");
+        }
+        if (!lockedPayer.getCurrency().equals(lockedPayee.getCurrency())) {
+            throw new RequestException(ResponseCodes.BAD_REQUEST, "Currency mismatch between wallets");
+        }
+        postEntry(lockedPayer, TransactionType.DEBIT, amount, reference + "-DR", debitNarration);
+        postEntry(lockedPayee, TransactionType.CREDIT, amount, reference + "-CR", creditNarration);
     }
 
     private WalletEntity findWallet(String username) {

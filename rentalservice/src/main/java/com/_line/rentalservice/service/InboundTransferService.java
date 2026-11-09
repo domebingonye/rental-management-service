@@ -26,18 +26,6 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.Optional;
 
-/**
- * Transfers into virtual accounts: webhook intake and verify-then-credit.
- * <p>
- * The webhook is only a <em>notification</em>. Its body is never trusted for money movement:
- * <ol>
- *   <li>the HMAC signature over the raw body must match (proves it came from the provider),</li>
- *   <li>the event is recorded and de-duplicated by session id,</li>
- *   <li>the provider is requeried server-to-server for the authoritative status,</li>
- *   <li>only a SUCCESSFUL requery for one of our accounts credits the wallet — with the provider's
- *       amount and account, not the webhook's.</li>
- * </ol>
- */
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -50,10 +38,7 @@ public class InboundTransferService {
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
 
-    // ---------------------------------------------------------------- webhook
-
     public InboundTransfer handleWebhook(String rawBody, String signature) {
-        // 1. Authenticity: signature is computed over the exact raw bytes received.
         if (!HmacUtil.verify(rawBody, signature, propsReader.getProviderWebhookSecret())) {
             log.warn("Rejected webhook with invalid signature");
             throw new RequestException(ResponseCodes.UNAUTHORIZED, "Invalid signature");
@@ -66,31 +51,21 @@ public class InboundTransferService {
         }
         log.info("Webhook {} received for session {}", event.getEvent(), claim.getSessionId());
 
-        // 2. Record + de-duplicate. A re-delivered webhook for a finished transfer is just acknowledged.
         recordWebhook(claim);
-        // Re-read with its relations loaded (the entity returned by save() is detached with lazy proxies).
         InboundTransferEntity record = inboundTransferDaoService.findBySessionId(claim.getSessionId()).orElseThrow();
         if (record.getStatus().isFinal()) {
             log.info("Session {} already {}; webhook acknowledged without action", record.getSessionId(), record.getStatus());
             return InboundTransferDaoService.toDto(record);
         }
 
-        // 3 + 4. Verify with the provider, then credit.
         return verify(record.getSessionId());
     }
 
-    // ---------------------------------------------------------------- verification
-
-    /**
-     * Requeries the provider and moves the transfer to its final state. Safe to call repeatedly
-     * (webhook retries, staff requery): a finished transfer is returned unchanged.
-     */
     public InboundTransfer verify(String sessionId) {
         InboundTransferEntity current = inboundTransferDaoService.findBySessionId(sessionId)
                 .orElseThrow(() -> new RequestException(ResponseCodes.NOT_FOUND, "Inbound transfer not found"));
         if (current.getStatus().isFinal()) return InboundTransferDaoService.toDto(current);
 
-        // Network call happens OUTSIDE the database transaction so no locks are held while we wait.
         Optional<ProviderTransaction> providerTx = paymentProviderClient.requery(sessionId);
 
         return transactionTemplate.execute(status -> {
@@ -104,8 +79,6 @@ public class InboundTransferService {
             record.setSenderName(tx.getSourceAccountName())
                     .setSenderAccountNumber(tx.getSourceAccountNumber())
                     .setSenderBankName(tx.getSourceBankName());
-            // Link to our account using the PROVIDER's destination (never the webhook's), whatever the
-            // outcome, so the customer also sees pending and failed transfers in their history.
             if (isForThisPlatform(tx)) {
                 virtualAccountDaoService.findByAccountNumber(tx.getDestinationAccountNumber()).ifPresent(record::setVirtualAccount);
             }
@@ -131,8 +104,6 @@ public class InboundTransferService {
             return finish(record, InboundTransferStatus.REJECTED, "Destination virtual account not found");
         }
 
-        // The webhook's claims are only compared, never used: a forged or tampered webhook can at most
-        // trigger verification of a real transfer, it cannot change the amount or the beneficiary.
         boolean claimsMatch = tx.getAmount().compareTo(Objects.requireNonNullElse(record.getClaimedAmount(), tx.getAmount())) == 0
                 && Objects.equals(tx.getDestinationAccountNumber(), Objects.requireNonNullElse(record.getClaimedAccountNumber(), tx.getDestinationAccountNumber()));
         if (!claimsMatch) {
@@ -143,7 +114,6 @@ public class InboundTransferService {
 
         VirtualAccountEntity va = account.get();
         String narration = "Transfer from " + tx.getSourceAccountName() + " (" + tx.getSourceBankName() + ")";
-        // Ledger reference = session id, so even a race between two verifications cannot credit twice.
         walletService.credit(va.getWallet().getUser().getUsername(), tx.getAmount(), record.getSessionId(), narration);
 
         record.setVerifiedAmount(tx.getAmount());
@@ -165,14 +135,10 @@ public class InboundTransferService {
         return InboundTransferDaoService.toDto(inboundTransferDaoService.save(record));
     }
 
-    // ---------------------------------------------------------------- queries
-
     public Page<InboundTransfer> getMyTransfers(String username, int page, int size) {
         return inboundTransferDaoService.findByUsername(username, PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, 100)))
                 .map(InboundTransferDaoService::toDto);
     }
-
-    // ---------------------------------------------------------------- internals
 
     private InboundTransferEntity recordWebhook(ProviderTransaction claim) {
         Optional<InboundTransferEntity> existing = inboundTransferDaoService.findBySessionId(claim.getSessionId());
@@ -189,7 +155,6 @@ public class InboundTransferService {
                     .setStatus(InboundTransferStatus.PENDING_VERIFICATION)
                     .setWebhookCount(1));
         } catch (DataIntegrityViolationException e) {
-            // Same webhook delivered twice at the same moment: the other request created the row.
             return inboundTransferDaoService.findBySessionId(claim.getSessionId()).orElseThrow(() -> e);
         }
     }
