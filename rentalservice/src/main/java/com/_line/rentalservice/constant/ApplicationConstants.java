@@ -5,7 +5,6 @@ public final class ApplicationConstants {
     public static final String BEARER_PREFIX = "Bearer ";
     public static final String ROLE_CLAIM = "role";
     public static final String CODE_CLAIM = "code";
-    /** Header carrying the HMAC-SHA512 signature of a payment-provider webhook body. */
     public static final String PROVIDER_SIGNATURE_HEADER = "X-Provider-Signature";
 
     private ApplicationConstants() {}

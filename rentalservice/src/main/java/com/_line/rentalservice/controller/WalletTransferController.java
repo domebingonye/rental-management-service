@@ -24,21 +24,18 @@ public class WalletTransferController {
 
     private final WalletTransferService walletTransferService;
 
-    /** Step 1: confirm the merchant's name for a wallet number. */
     @GetMapping("/recipient")
     @PreAuthorize(CUSTOMER_ONLY)
     public ResponseEntity<TransferRecipient> lookupRecipient(@RequestParam String walletNumber) {
         return ResponseEntity.ok(walletTransferService.lookupRecipient(walletNumber));
     }
 
-    /** Step 2: pay the merchant from the caller's wallet. */
     @PostMapping
     @PreAuthorize(CUSTOMER_ONLY)
     public ResponseEntity<WalletTransfer> transfer(Authentication auth, @Valid @RequestBody WalletTransferRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(walletTransferService.transfer(auth.getName(), request));
     }
 
-    /** Transfers the caller sent (customer) or received (merchant), newest first. */
     @GetMapping
     @PreAuthorize(WALLET_HOLDERS)
     public ResponseEntity<Page<WalletTransfer>> myTransfers(Authentication auth,

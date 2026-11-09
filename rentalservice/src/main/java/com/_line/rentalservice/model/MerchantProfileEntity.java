@@ -8,7 +8,6 @@ import lombok.experimental.Accessors;
 
 import java.time.LocalDateTime;
 
-/** Business details captured when a merchant onboards. */
 @Entity
 @Getter
 @Setter
@@ -27,14 +26,12 @@ public class MerchantProfileEntity extends AuditModel {
     @Column(name = "BUSINESS_ADDRESS")
     private String businessAddress;
 
-    /** Company registration number (e.g. CAC RC number). */
     @Column(name = "REGISTRATION_NUMBER", length = 50)
     private String registrationNumber;
 
     @Column(name = "APPROVED_ON")
     private LocalDateTime approvedOn;
 
-    /** Username of the staff member who approved this merchant. */
     @Column(name = "APPROVED_BY", length = 80)
     private String approvedBy;
 }

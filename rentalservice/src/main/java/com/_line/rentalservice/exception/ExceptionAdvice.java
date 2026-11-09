@@ -49,7 +49,6 @@ public class ExceptionAdvice {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(build(ResponseCodes.FORBIDDEN.getCode(), e.getMessage()));
     }
 
-    /** Two sign-ups racing for the same username/email both pass the exists-check; the unique index catches it. */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<BaseResponse> handleException(DataIntegrityViolationException e) {
         log.warn("Constraint violation: {}", e.getMostSpecificCause().getMessage());

@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Data;
 
-/** Public view of an account. Never carries the password. */
 @Data
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)

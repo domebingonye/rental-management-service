@@ -23,11 +23,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Reads "Authorization: Bearer &lt;jwt&gt;", validates it and puts the user into the SecurityContext.
- * The user is re-loaded from the database on every request, so a suspension takes effect immediately
- * rather than when the token expires.
- */
 @Component
 @Slf4j
 public class AuthTokenFilter extends OncePerRequestFilter {

@@ -18,14 +18,12 @@ public class VirtualAccountController {
 
     private final VirtualAccountService virtualAccountService;
 
-    /** The caller's virtual account (account number to share for transfers into their wallet). */
     @GetMapping
     @PreAuthorize(WALLET_HOLDERS)
     public ResponseEntity<VirtualAccount> myVirtualAccount(Authentication auth) {
         return ResponseEntity.ok(virtualAccountService.getVirtualAccount(auth.getName()));
     }
 
-    /** Creates the caller's virtual account if missing, otherwise returns the existing one. */
     @PostMapping
     @PreAuthorize(WALLET_HOLDERS)
     public ResponseEntity<VirtualAccount> generate(Authentication auth) {

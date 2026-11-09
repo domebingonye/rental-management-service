@@ -6,7 +6,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Webhook body: {"event": "transfer.successful" | "transfer.failed", "data": {...}}. */
 @Data
 @Builder
 @NoArgsConstructor

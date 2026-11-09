@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 
-/** Persistence-facing helpers for MERCHANT_PROFILES. */
 @Service
 @RequiredArgsConstructor
 public class MerchantProfileDaoService {

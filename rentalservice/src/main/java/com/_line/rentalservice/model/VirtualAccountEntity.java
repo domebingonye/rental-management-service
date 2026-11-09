@@ -6,11 +6,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 
-/**
- * A bank account number dedicated to one wallet. Money "transferred" to this account number is credited
- * to the wallet. With a real provider (Paystack, Monnify, Flutterwave…) the number would be issued by the
- * provider; here it is generated in-house.
- */
 @Entity
 @Getter
 @Setter
@@ -23,7 +18,6 @@ public class VirtualAccountEntity extends AuditModel {
     @JoinColumn(name = "WALLET_ID", nullable = false, unique = true)
     private WalletEntity wallet;
 
-    /** 10-digit NUBAN-style number (9-digit serial + check digit). */
     @Column(name = "ACCOUNT_NUMBER", nullable = false, unique = true, length = 10)
     private String accountNumber;
 

@@ -18,7 +18,6 @@ import java.math.BigDecimal;
         @Index(name = "IX_WALLET_TRANSFERS_RECIPIENT", columnList = "RECIPIENT_WALLET_ID")})
 public class WalletTransferEntity extends AuditModel {
 
-    /** Client-supplied or generated; unique, and the idempotency key for retries. */
     @Column(name = "REFERENCE", nullable = false, unique = true, length = 60)
     private String reference;
 

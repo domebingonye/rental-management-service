@@ -18,10 +18,6 @@ import org.springframework.web.client.RestClientException;
 
 import java.util.Optional;
 
-/**
- * Server-to-server client for the payment provider (here: the mock bank, called over real HTTP).
- * Swapping in Paystack/Monnify would mean changing only this class.
- */
 @Component
 @Slf4j
 @RequiredArgsConstructor
@@ -30,12 +26,6 @@ public class PaymentProviderClient {
     private final Environment environment;
     private final RestClient restClient = RestClient.builder().requestFactory(timeouts()).build();
 
-    /**
-     * Asks the provider for the authoritative status of a transfer.
-     *
-     * @return empty if the provider has no such transaction
-     * @throws RequestException 502 if the provider cannot be reached or errors, so the caller can retry later
-     */
     public Optional<ProviderTransaction> requery(String sessionId) {
         try {
             return Optional.ofNullable(restClient.get()

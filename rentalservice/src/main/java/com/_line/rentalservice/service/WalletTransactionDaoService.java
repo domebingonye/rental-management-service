@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
-/** Persistence-facing helpers for WALLET_TRANSACTIONS (the ledger) and entity → DTO mapping. */
 @Service
 @RequiredArgsConstructor
 public class WalletTransactionDaoService {
@@ -24,7 +23,6 @@ public class WalletTransactionDaoService {
         return walletTransactionRepository.findByReference(reference);
     }
 
-    /** Newest first. */
     public Page<WalletTransactionEntity> findByWalletId(Long walletId, Pageable pageable) {
         return walletTransactionRepository.findByWalletIdOrderByIdDesc(walletId, pageable);
     }

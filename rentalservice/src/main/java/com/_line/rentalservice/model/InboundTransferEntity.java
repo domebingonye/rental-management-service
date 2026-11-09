@@ -10,10 +10,6 @@ import lombok.experimental.Accessors;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Our record of a transfer into a virtual account, created when the first webhook arrives.
- * "Claimed" fields come from the webhook (untrusted); "verified" fields come from the provider requery.
- */
 @Entity
 @Getter
 @Setter
@@ -25,7 +21,6 @@ public class InboundTransferEntity extends AuditModel {
     @Column(name = "SESSION_ID", nullable = false, unique = true, length = 64)
     private String sessionId;
 
-    /** Set once the provider confirms which of our virtual accounts received the money. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "VIRTUAL_ACCOUNT_ID")
     private VirtualAccountEntity virtualAccount;
@@ -61,7 +56,6 @@ public class InboundTransferEntity extends AuditModel {
     @Column(name = "VERIFIED_ON")
     private LocalDateTime verifiedOn;
 
-    /** Two webhooks for the same session verifying at once cannot both win the final status update. */
     @Version
     @Column(name = "VERSION", nullable = false)
     private Long version;

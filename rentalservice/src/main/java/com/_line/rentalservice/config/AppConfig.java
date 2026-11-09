@@ -12,17 +12,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
 @EnableJpaAuditing(auditorAwareRef = "auditorAware")
-// Serialize Page<T> as a stable {content, page:{size,number,totalElements,totalPages}} shape.
 @EnableSpringDataWebSupport(pageSerializationMode = EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO)
 public class AppConfig {
 
-    /** Kept out of SecurityConfig so services can depend on it without a bean cycle. */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    /** Runs the mock bank's delayed settlement and webhook retries. */
     @Bean(name = "mockBankScheduler", destroyMethod = "shutdown")
     public ThreadPoolTaskScheduler mockBankScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
@@ -32,10 +29,6 @@ public class AppConfig {
         return scheduler;
     }
 
-    /**
-     * AuthTokenFilter is a @Component so Boot would also register it as a plain servlet filter.
-     * It must only run inside the security filter chain, so disable the automatic registration.
-     */
     @Bean
     public FilterRegistrationBean<AuthTokenFilter> authTokenFilterRegistration(AuthTokenFilter filter) {
         FilterRegistrationBean<AuthTokenFilter> registration = new FilterRegistrationBean<>(filter);

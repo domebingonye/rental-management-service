@@ -28,10 +28,6 @@ public class WalletTransferDaoService {
         return walletTransferRepository.findInvolving(username, pageable);
     }
 
-    /**
-     * @param viewerUsername decides the direction shown (SENT / RECEIVED)
-     * @param senderBalanceAfter included only on the sender's own response, never shown to the merchant
-     */
     public static WalletTransfer toDto(WalletTransferEntity t, String viewerUsername, BigDecimal senderBalanceAfter) {
         boolean sent = t.getSenderWallet().getUser().getUsername().equals(viewerUsername);
         return WalletTransfer.builder()

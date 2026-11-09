@@ -10,10 +10,6 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-/**
- * Staff cannot self-register, so the first staff account is created on startup
- * (only when no staff user exists yet). Credentials come from configuration / env vars.
- */
 @Component
 @Slf4j
 @RequiredArgsConstructor

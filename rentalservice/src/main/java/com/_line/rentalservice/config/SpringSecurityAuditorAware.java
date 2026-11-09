@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 
-/** Fills CREATED_BY / UPDATED_BY with the logged-in username, or "SYSTEM" for self sign-up and bootstrap. */
 @Component("auditorAware")
 public class SpringSecurityAuditorAware implements AuditorAware<String> {
     @Override

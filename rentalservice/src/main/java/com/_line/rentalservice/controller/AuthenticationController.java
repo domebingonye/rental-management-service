@@ -30,9 +30,6 @@ public class AuthenticationController {
     private final AuthenticationService authenticationService;
     private final SystemUserService userService;
 
-    // ------------------------------------------------------------ public
-
-    /** One login endpoint for customers, merchants and staff. */
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(HttpServletRequest request, @Valid @RequestBody LoginRequest login) {
         return ResponseEntity.ok(authenticationService.processLogin(request, login));
@@ -48,22 +45,17 @@ public class AuthenticationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(userService.onboardMerchant(request));
     }
 
-    /** Resolve the current user from the bearer token (validated inside the service, as in galaxy-auth-service). */
     @GetMapping("/user")
     public ResponseEntity<LoginResponse> getUser(
             @RequestHeader(value = ApplicationConstants.AUTHORIZATION_KEY, required = false) String authorization) {
         return ResponseEntity.ok(authenticationService.getUser(authorization));
     }
 
-    // ------------------------------------------------------------ authenticated
-
     @PostMapping("/logout")
     public ResponseEntity<Void> logout() {
         authenticationService.logout();
         return ResponseEntity.ok().build();
     }
-
-    // ------------------------------------------------------------ staff only
 
     @PostMapping("/staff")
     @PreAuthorize(STAFF_ONLY)

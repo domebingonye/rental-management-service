@@ -9,10 +9,6 @@ import lombok.experimental.Accessors;
 
 import java.math.BigDecimal;
 
-/**
- * Immutable ledger entry. Every balance change writes one row, so the balance can always be
- * explained (and re-derived) from the history.
- */
 @Entity
 @Getter
 @Setter
@@ -25,7 +21,6 @@ public class WalletTransactionEntity extends AuditModel {
     @JoinColumn(name = "WALLET_ID", nullable = false)
     private WalletEntity wallet;
 
-    /** Unique per transaction; doubles as the idempotency key so a retried request is not applied twice. */
     @Column(name = "REFERENCE", nullable = false, unique = true, length = 64)
     private String reference;
 

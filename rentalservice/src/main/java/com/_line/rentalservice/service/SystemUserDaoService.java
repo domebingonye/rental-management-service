@@ -12,7 +12,6 @@ import java.security.SecureRandom;
 import java.util.Locale;
 import java.util.Optional;
 
-/** Persistence-facing helpers for SYS_USERS: lookups, code generation and entity → DTO mapping. */
 @Service
 @RequiredArgsConstructor
 public class SystemUserDaoService {
@@ -54,7 +53,6 @@ public class SystemUserDaoService {
         return systemUserRepository.save(entity);
     }
 
-    /** e.g. CUS-8F3K2A9Q, MER-…, STF-… — unguessable, so it is safe to expose in URLs. */
     public String generateUserCode(UserRoleType role) {
         String prefix = switch (role) {
             case CUSTOMER -> "CUS";
