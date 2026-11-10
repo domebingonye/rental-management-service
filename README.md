@@ -1,350 +1,464 @@
-# Rental Service — Wallet System
+# Rental Management Service
 
-A Spring Boot wallet system built for the 3Line Limited Senior Backend Engineer assessment, set in a simple
-rental marketplace with three kinds of users: **customers**, **merchants** and **staff**.
+A Spring Boot-based wallet and rental management platform that supports customer and merchant registration, wallet creation, virtual bank accounts, fund transfers, and asset rentals.
 
-| Assessment requirement | Where it is covered |
+The application demonstrates secure authentication, transactional wallet operations, payment verification, concurrency handling, and merchant-based asset rental workflows.
+
+## Technology Stack
+
+| Technology | Purpose |
 |---|---|
-| **1. Create a user & generate account** | Customer / merchant sign-up creates the user, a **wallet** and a **virtual bank account** in one transaction |
-| **2. Fund transfer between accounts** | Bank → wallet (via the virtual account, webhook-verified), customer wallet → merchant wallet, and rental payments |
+| Java 21 | Programming language |
+| Spring Boot 3.4.11 | Backend framework |
+| Spring Web | REST API development |
+| Spring Security | Authentication and authorization |
+| Spring Data JPA | Database persistence |
+| Microsoft SQL Server | Relational database |
+| JWT | Stateless authentication |
+| BCrypt | Password hashing |
+| Hibernate | ORM |
+| Swagger / OpenAPI | API documentation |
+| Maven | Build and dependency management |
 
----
+## Core Features
 
-## Tech stack
+### 1. User Management and Authentication
 
-- Java 21, Spring Boot 3.4.11 (Web, Security, Data JPA, Validation)
-- Microsoft SQL Server (JPA/Hibernate creates the tables on startup)
-- JWT authentication (jjwt 0.12), BCrypt password hashing
-- Swagger UI (springdoc-openapi)
+The application supports three user roles:
 
----
+- **CUSTOMER:** Can fund wallets, transfer money, and rent assets.
+- **MERCHANT:** Can manage assets and receive rental payments.
+- **STAFF:** Can manage users and approve merchant registrations.
 
-## Running the application
+Features include:
 
-### 1. Database
-Create a database called `RENTALDB` on SQL Server and give the application login access to it:
+- Customer registration.
+- Merchant registration.
+- Automatic wallet creation during registration.
+- Automatic virtual bank account generation.
+- JWT-based authentication.
+- Role-based access control.
+- Merchant approval workflow.
+- User suspension and reactivation.
+- Secure password hashing using BCrypt.
 
-```sql
-USE RENTALDB;
-CREATE USER [Dom] FOR LOGIN [Dom];
-ALTER ROLE db_owner ADD MEMBER [Dom];
-```
+Customer registration creates an active customer account, wallet, and virtual bank account in one database transaction.
 
-Connection settings are in `rentalservice/src/main/resources/application.properties`:
+Merchant registration creates the user, merchant profile, wallet, and virtual bank account in one transaction. Newly registered merchants remain in `PENDING_APPROVAL` status until approved by staff.
 
-```properties
-spring.datasource.url=jdbc:sqlserver://DOMINIC:1433;databaseName=RENTALDB;encrypt=false;trustServerCertificate=true
-spring.datasource.username=Dom
-spring.datasource.password=123
-```
+### 2. Wallet Management
 
-### 2. Start
-```bash
-cd rentalservice
-./mvnw spring-boot:run
-```
+Every registered customer and merchant receives a wallet.
 
-- Base URL: `http://localhost:6060/rental-service`
-- Swagger UI: `http://localhost:6060/rental-service/swagger-ui/index.html`
+Wallet features include:
 
-> Every endpoint lives under the context path **`/rental-service`**. Calling `http://localhost:6060/api/...`
-> or `http://localhost:6060/mock-bank/...` without it returns 404.
+- Wallet balance enquiry.
+- Wallet funding.
+- Wallet-to-wallet transfers.
+- Transaction history.
+- Transaction references.
+- Balance validation.
+- Protection against negative balances.
 
-### 3. First staff user
-Staff cannot sign up themselves. On first startup the application creates one staff account:
+All monetary values are represented using `BigDecimal` to avoid floating-point precision issues.
 
-| Setting | Default | Override with env var |
-|---|---|---|
-| `bootstrap.staff.username` | `admin` | `STAFF_BOOTSTRAP_USERNAME` |
-| `bootstrap.staff.password` | `ChangeMe@123` | `STAFF_BOOTSTRAP_PASSWORD` |
+Every wallet balance update is accompanied by a corresponding wallet transaction record containing:
 
-It is only created when no staff user exists yet, so changing the setting later does not change an existing password.
+- Transaction type.
+- Transaction amount.
+- Previous balance.
+- New balance.
+- Transaction reference.
 
----
+### 3. Bank-to-Wallet Funding
 
-## Architecture
+The application includes a mock bank integration to simulate external bank transfers and payment provider interactions.
 
-```
-Controller  →  Service  →  DaoService  →  Repository  →  SQL Server
- (HTTP, roles)  (business rules,   (persistence helpers,
-                 transactions)      code generation, DTO mapping)
-```
+The funding workflow supports:
 
-- Services never call repositories directly — only `*DaoService` classes do.
-- Packages: `config`, `constant`, `controller`, `dto`, `enums`, `exception`, `filter`, `model`, `repository`, `service`, `utils`.
-- Every request (except sign-up, login, webhooks and the mock bank) needs `Authorization: Bearer <jwt>`.
-  Roles (`CUSTOMER`, `MERCHANT`, `STAFF`) are enforced with `@PreAuthorize`.
+1. Initiating a bank transfer.
+2. Returning a pending transfer response.
+3. Simulating successful or failed settlement.
+4. Sending an HMAC-SHA512 signed webhook.
+5. Validating the webhook signature.
+6. Re-querying the payment provider to verify the transaction.
+7. Crediting the wallet only after successful verification.
 
----
+Webhook events are deduplicated using the provider session ID to prevent duplicate wallet credits.
 
-## Requirement 1 — Create a user & generate account
+The mock bank allows the funding workflow to be tested without connecting to a real banking provider.
 
-### Customer sign-up
-`POST /api/v1/authentication/signup/customer`
+### 4. Wallet-to-Wallet Transfers
 
-```json
-{
-  "email": "domtest@gmail.com",
-  "username": "domtest",
-  "password": "Hello@123",
-  "firstName": "dominic",
-  "surname": "Ebingonye",
-  "phoneNumber": "08060498746"
-}
-```
+Customers can transfer funds directly to approved merchants.
 
-One database transaction creates **the user, a wallet and a virtual account**, so a user can never exist without them:
+The transfer process:
 
-```json
-{
-  "code": "CUS-KUMH8YUE",
-  "username": "domtest",
-  "userRoleType": "CUSTOMER",
-  "status": "ACTIVE",
-  "wallet": {
-    "walletNumber": "7435649138",
-    "balance": 0.00,
-    "currency": "NGN"
-  },
-  "virtualAccount": {
-    "accountNumber": "6918758928",
-    "accountName": "RENTAL/DOMINIC EBINGONYE",
-    "bankName": "Rental Demo MFB",
-    "bankCode": "999",
-    "walletNumber": "7435649138"
-  }
-}
-```
+1. Customer supplies the recipient wallet number.
+2. The system validates the recipient.
+3. Customer initiates the transfer.
+4. The system checks wallet balances.
+5. The sender's wallet is debited.
+6. The recipient's wallet is credited.
+7. The transaction is recorded.
 
-- **Wallet number** — 10-digit internal identifier.
-- **Virtual account number** — 10-digit **NUBAN-style** number (9-digit serial + check digit computed with the
-  CBN weights `3,7,3,3,7,3,…` and bank code `999`). This is the account the user shares to receive bank transfers.
-- There is no real payment provider; account numbers are generated in-house.
+The debit, credit, and transfer record are processed within a single database transaction.
 
-### Merchant sign-up
-`POST /api/v1/authentication/signup/merchant` — same fields plus `businessName`, `businessAddress`, `registrationNumber`.
-The merchant gets a wallet and a virtual account (named after the business, e.g. `RENTAL/VINCENT VENTURES`)
-but starts as **`PENDING_APPROVAL`** and cannot log in until staff approve them.
+Wallets are locked in ascending ID order to reduce deadlock risks during concurrent transfers.
 
-### Staff
-| Action | Endpoint (staff token required) |
-|---|---|
-| Create another staff user | `POST /api/v1/authentication/staff` |
-| List merchants awaiting approval | `GET /api/v1/authentication/merchants/pending` |
-| Approve a merchant | `PUT /api/v1/authentication/merchants/{code}/approve` |
-| Suspend / reactivate a user | `PUT /api/v1/authentication/user/{code}/status?status=SUSPENDED` |
+Transaction references support idempotency, preventing duplicate processing of the same request.
 
-### Login (all roles)
-`POST /api/v1/authentication/login`
+### 5. Asset Management
 
-```json
-{ "username": "domtest", "password": "Hello@123", "userRoleType": "CUSTOMER" }
-```
+Approved merchants can create and manage rental assets.
 
-- `username` accepts the username **or** the email.
-- `userRoleType` is optional; when sent, a user of another role is rejected (e.g. a customer on the staff portal).
-- Returns `"token": "Bearer eyJ…"`, valid for 1 hour.
-- Wrong password, unknown user and wrong portal all return the same `401 Invalid username or password`.
+Each asset contains information such as:
 
----
+- Asset name.
+- Asset category.
+- Description.
+- Daily rental rate.
+- Available quantity.
+- Asset location.
+- Merchant ownership.
 
-## Requirement 2 — Fund transfer between accounts
+Example asset:
 
-### Ledger rules (apply to every money movement)
-- Money is `BigDecimal` with 2 decimal places, never `double`.
-- Every balance change writes a row to `WALLET_TRANSACTIONS` (type, amount, balance before/after, reference),
-  so any balance can be explained from its history. A wallet can never go below zero.
-- A wallet row is **locked** (`SELECT … WITH (UPDLOCK)`) while its balance changes, so concurrent payments
-  cannot overwrite each other or overdraw. When two wallets are involved they are locked **lowest id first**,
-  which rules out deadlocks.
-- Clients can send a **`reference`**; sending the same one again (e.g. after a timeout) returns the original
-  result instead of moving money twice.
-
-### 2a. Bank → wallet (through the virtual account)
-
-This is the realistic flow: the customer sends money from their commercial bank to their virtual account,
-and the wallet is credited only after the transfer is **verified**.
-
-Because there is no real bank, a **mock bank** under `/mock-bank` plays the customer's bank and the payment
-provider. It talks to the platform only over HTTP, like a real provider.
-
-```
-Customer's bank app (mock)        Provider (mock)                    Rental platform
-──────────────────────────        ───────────────────                ─────────────────────────────────
-1. POST /mock-bank/api/v1/transfers
-   → 202, status PENDING
-                                  2. ~3 s later: settles
-                                     (SUCCESSFUL, or FAILED)
-                                  3. POST signed webhook  ─────────▶ 4. verify HMAC-SHA512 signature
-                                     (retries with back-off)         5. record event, de-duplicate by session id
-                                                         ◀────────── 6. requery provider for the real status
-                                                                     7. SUCCESSFUL + our account → credit wallet
-```
-
-**Step 1 — send money from the bank app** (no token needed; this simulates the customer's bank):
-`POST /mock-bank/api/v1/transfers`
-
-```json
-{
-  "sourceBankName": "GTBank",
-  "sourceAccountNumber": "0123456789",
-  "sourceAccountName": "DOMINIC EBINGONYE",
-  "destinationAccountNumber": "6918758928",
-  "destinationBankCode": "999",
-  "amount": 10000.00,
-  "narration": "Wallet funding"
-}
-```
-
-Response `202`:
-```json
-{ "sessionId": "999058261109142612516322265312", "status": "PENDING", "amount": 10000.00, "destinationAccountName": "RENTAL/DOMINIC EBINGONYE" }
-```
-
-**Step 2 — watch it arrive** (customer token): `GET /api/v1/inbound-transfers` shows the status moving
-`PENDING_VERIFICATION → CREDITED`, and `GET /api/v1/wallet` shows the new balance.
-
-Why it is built this way:
-- **The webhook is only a notification.** Its signature proves it came from the provider, but the wallet is
-  credited only after the platform **requeries the provider** (`GET /mock-bank/api/v1/transactions/{sessionId}`
-  with the provider secret key). The amount and account come from the requery, not from the webhook body.
-- **Re-sent webhooks are harmless.** The bank session id is the ledger reference, so it can only be credited once.
-- **The requery happens outside the database transaction**, so no locks are held while waiting on the network.
-  If the provider is unreachable the webhook returns `502` and the provider retries later.
-
-Other mock-bank endpoints: `GET /mock-bank/api/v1/name-enquiry?accountNumber=…&bankCode=999` (confirm the
-recipient's name) and `GET /mock-bank/api/v1/transfers/{sessionId}` (the customer's receipt).
-A source account number ending in **`0000`** always fails with "Insufficient funds", to demonstrate a failed transfer.
-
-### 2b. Direct wallet top-up (simulated)
-`POST /api/v1/wallet/fund` (customer) — credits the wallet immediately. This is a shortcut that stands in for a
-card payment; the verified path above is the realistic one.
-
-```json
-{ "amount": 5000000.00, "reference": "FUND-WALLET-001", "narration": "Wallet funding" }
-```
-
-### 2c. Wallet → wallet (customer pays merchant)
-| Step | Endpoint (customer token) |
-|---|---|
-| Confirm the merchant's name | `GET /api/v1/wallet/transfers/recipient?walletNumber=2765874346` |
-| Pay | `POST /api/v1/wallet/transfers` |
-
-```json
-{ "recipientWalletNumber": "2765874346", "amount": 2500.00, "reference": "PAY-0001", "narration": "Deposit" }
-```
-
-In one database transaction: lock both wallets (lowest id first) → check balance → debit customer
-(`PAY-0001-DR`) → credit merchant (`PAY-0001-CR`) → save the transfer. Only approved, active merchants can be paid.
-
-`GET /api/v1/wallet/transfers` lists transfers sent (customer) or received (merchant).
-
-### 2d. Renting an asset (wallet-to-wallet payment in a business flow)
-
-**Merchant creates an asset** — `POST /api/v1/assets` (merchant token):
 ```json
 {
   "name": "Honda EU22i Generator",
-  "description": "2.2kVA petrol inverter generator",
   "category": "EQUIPMENT",
-  "dailyRate": 15000.00,
+  "dailyRate": 15000,
   "quantity": 3,
-  "location": "Lekki Phase 1, Lagos"
-}
-```
-Returns a code such as `AST-6A3W5ZZE`.
-
-**Customer rents it** — `POST /api/v1/rentals` (customer token):
-```json
-{ "assetCode": "AST-6A3W5ZZE", "quantity": 1, "startDate": "2026-11-10", "endDate": "2026-11-12" }
-```
-```json
-{
-  "reference": "RNT-84179E6BDB6F45438E30A26769AFA4FE",
-  "days": 3,
-  "dailyRate": 15000.00,
-  "totalAmount": 45000.00,
-  "status": "ACTIVE",
-  "merchantName": "Vincent Ventures"
+  "location": "Lekki Phase 1"
 }
 ```
 
-In one database transaction: lock the asset → check units in stock → compute the price on the server
-(daily rate × days × quantity) → lock both wallets → **debit the customer, credit the merchant** →
-reduce the asset quantity (it becomes `UNAVAILABLE` at 0) → save the rental. If anything fails (not enough
-stock, insufficient balance) nothing is changed.
+### 6. Rental Management
 
----
+Customers can rent available assets from approved merchants.
 
-## End-to-end walkthrough
+The rental workflow includes:
 
-1. `POST /api/v1/authentication/login` as `admin` → staff token
-2. `POST /api/v1/authentication/signup/customer` → customer + wallet + virtual account
-3. `POST /api/v1/authentication/signup/merchant` → merchant (pending) + wallet + virtual account
-4. `PUT /api/v1/authentication/merchants/{code}/approve` with the staff token
-5. `POST /mock-bank/api/v1/transfers` to the customer's virtual account → wallet credited after verification
-6. Merchant logs in → `POST /api/v1/assets`
-7. Customer logs in → `POST /api/v1/rentals` → customer debited, merchant credited
-8. Check both sides: `GET /api/v1/wallet`, `GET /api/v1/wallet/transactions`, `GET /api/v1/rentals`
+1. Customer selects an asset.
+2. Customer provides the rental start and end dates.
+3. The system validates asset availability.
+4. Rental duration is calculated.
+5. The rental amount is calculated using the merchant's configured rate.
+6. Customer wallet balance is validated.
+7. Customer wallet is debited.
+8. Merchant wallet is credited.
+9. Asset quantity is reduced.
+10. Rental information is persisted.
 
----
+The rental operation is executed within a database transaction to ensure that payment, inventory updates, and rental records remain consistent.
 
-## Endpoint reference
+## Application Architecture
 
-| Method | Path | Who |
+The application follows a layered architecture:
+
+```text
+Controller
+    |
+    v
+Service
+    |
+    v
+DaoService
+    |
+    v
+Repository
+    |
+    v
+Database
+```
+
+### Architectural Responsibilities
+
+| Layer | Responsibility |
+|---|---|
+| Controller | Exposes REST endpoints and handles HTTP requests |
+| Service | Contains business logic and coordinates operations |
+| DaoService | Handles data access operations |
+| Repository | Provides database persistence through Spring Data JPA |
+| Model | Defines database entities |
+| DTO | Defines request and response objects |
+| Security | Handles authentication and authorization |
+| Exception | Centralizes application exception handling |
+
+Services interact with the database through the DaoService layer rather than accessing repositories directly.
+
+## Project Structure
+
+```text
+rentalservice/
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── ...
+│   │   │           ├── config/
+│   │   │           ├── constant/
+│   │   │           ├── controller/
+│   │   │           ├── dto/
+│   │   │           ├── enums/
+│   │   │           ├── exception/
+│   │   │           ├── filter/
+│   │   │           ├── model/
+│   │   │           ├── repository/
+│   │   │           ├── service/
+│   │   │           └── utils/
+│   │   └── resources/
+│   └── test/
+├── mvnw
+├── mvnw.cmd
+├── pom.xml
+└── README.md
+```
+
+## Prerequisites
+
+Ensure the following are installed:
+
+- Java 21 or later.
+- Microsoft SQL Server.
+- Maven (optional, since the project includes Maven Wrapper).
+- Git.
+
+## Getting Started
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/domebingonye/rental-management-service.git
+```
+
+### 2. Navigate to the Project
+
+```bash
+cd rental-management-service/rentalservice
+```
+
+### 3. Configure the Database
+
+Create a SQL Server database:
+
+```sql
+CREATE DATABASE RENTALDB;
+```
+
+Configure the database connection in your application configuration.
+
+Use environment variables or an external configuration file for database credentials and application secrets. Do not commit production credentials or JWT signing keys to source control.
+
+### 4. Configure Environment Variables
+
+Configure the required database connection details and JWT signing key for your environment.
+
+The application also supports the following staff bootstrap variables:
+
+```properties
+STAFF_BOOTSTRAP_USERNAME=admin
+STAFF_BOOTSTRAP_PASSWORD=your-secure-password
+```
+
+A default staff account is provisioned during the first application startup if one does not already exist. Override the bootstrap credentials before deploying the application.
+
+### 5. Run the Application
+
+Using Maven Wrapper on Linux or macOS:
+
+```bash
+./mvnw spring-boot:run
+```
+
+On Windows:
+
+```bash
+mvnw.cmd spring-boot:run
+```
+
+### 6. Access the Application
+
+Base URL:
+
+```text
+http://localhost:6060/rental-service
+```
+
+Swagger UI:
+
+```text
+http://localhost:6060/rental-service/swagger-ui/index.html
+```
+
+## API Documentation
+
+All application endpoints are exposed under:
+
+```text
+/rental-service
+```
+
+### Authentication Endpoints
+
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/v1/authentication/signup/customer` | Public |
-| POST | `/api/v1/authentication/signup/merchant` | Public |
-| POST | `/api/v1/authentication/login` | Public |
-| GET | `/api/v1/authentication/user` | Bearer token |
-| POST | `/api/v1/authentication/logout` | Any user |
-| POST | `/api/v1/authentication/staff` | Staff |
-| GET | `/api/v1/authentication/merchants/pending` | Staff |
-| PUT | `/api/v1/authentication/merchants/{code}/approve` | Staff |
-| PUT | `/api/v1/authentication/user/{code}/status` | Staff |
-| GET | `/api/v1/wallet` | Customer, merchant |
-| GET | `/api/v1/wallet/transactions` | Customer, merchant |
-| POST | `/api/v1/wallet/fund` | Customer |
-| GET | `/api/v1/wallet/transfers/recipient` | Customer |
-| POST | `/api/v1/wallet/transfers` | Customer |
-| GET | `/api/v1/wallet/transfers`, `/{reference}` | Customer, merchant |
-| GET | `/api/v1/virtual-account` | Customer, merchant |
-| POST | `/api/v1/virtual-account` | Customer, merchant (create if missing) |
-| GET | `/api/v1/inbound-transfers` | Customer, merchant |
-| POST | `/api/v1/inbound-transfers/{sessionId}/requery` | Staff |
-| POST | `/api/v1/webhooks/bank-transfer` | Payment provider (HMAC signature) |
-| POST | `/api/v1/assets` | Merchant |
-| GET | `/api/v1/assets/mine` | Merchant |
-| GET | `/api/v1/assets/{code}` | Any user |
-| POST | `/api/v1/rentals` | Customer |
-| GET | `/api/v1/rentals`, `/{reference}` | Customer, merchant |
-| GET | `/mock-bank/api/v1/name-enquiry` | Public (simulated bank) |
-| POST | `/mock-bank/api/v1/transfers` | Public (simulated bank) |
-| GET | `/mock-bank/api/v1/transfers/{sessionId}` | Public (simulated bank) |
-| GET | `/mock-bank/api/v1/transactions/{sessionId}` | Provider secret key |
+| POST | `/api/v1/authentication/signup/customer` | Register a customer |
+| POST | `/api/v1/authentication/signup/merchant` | Register a merchant |
+| POST | `/api/v1/authentication/login` | Authenticate a user |
+| POST | `/api/v1/authentication/staff` | Create a staff account |
 
-Errors use one shape: `{ "code": "400", "message": "Insufficient wallet balance" }`.
+### Staff Management
 
----
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/v1/staff/merchants/pending` | List pending merchant applications |
+| PATCH | `/api/v1/staff/merchants/{id}/approve` | Approve a merchant |
+| PATCH | `/api/v1/staff/users/{id}/suspend` | Suspend a user |
+| PATCH | `/api/v1/staff/users/{id}/reactivate` | Reactivate a user |
 
-## Security notes
+### Wallet Endpoints
 
-- Passwords hashed with **BCrypt**; never returned by the API.
-- JWTs are HMAC-signed with a ≥ 256-bit key and the issuer is checked; the user is reloaded on every request,
-  so suspending an account takes effect immediately.
-- Account status is only revealed after a correct password (no user enumeration).
-- Webhook signatures are verified over the **raw body** with a constant-time comparison.
-- Secrets (`JWT_SECRET`, `PROVIDER_SECRET_KEY`, `PROVIDER_WEBHOOK_SECRET`, `STAFF_BOOTSTRAP_PASSWORD`) can be
-  supplied as environment variables; the values in `application.properties` are local-development defaults only.
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/v1/wallet` | Get wallet details |
+| GET | `/api/v1/wallet/transactions` | Get wallet transaction history |
+| POST | `/api/v1/wallet/fund` | Direct development funding shortcut |
+| GET | `/api/v1/wallet/transfers/recipient` | Validate transfer recipient |
+| POST | `/api/v1/wallet/transfers` | Transfer funds to another wallet |
 
----
+### Bank Transfer Endpoints
 
-## Limitations / next steps
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/mock-bank/api/v1/transfers` | Simulate a bank transfer |
+| GET | `/api/v1/inbound-transfers` | View inbound transfer records |
+| POST | `/api/v1/webhooks/bank` | Receive bank transfer webhook events |
 
-- The payment provider is simulated; with a real one (Paystack, Monnify, …) only `PaymentProviderClient`
-  and the webhook payload mapping would change.
-- The mock bank keeps pending settlements in memory; a restart before settlement leaves that transfer `PENDING`.
-- `POST /api/v1/wallet/fund` credits without verification and should be removed once all funding goes through the bank.
-- Logout is client-side (tokens stay valid until they expire); refresh tokens / revocation would be next.
-- Rentals cannot yet be returned or cancelled (which would refund and restock), and merchants cannot withdraw.
-- Automated tests are not included in this submission.
+### Asset Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/assets` | Create a rental asset |
+| GET | `/api/v1/assets` | List available assets |
+| GET | `/api/v1/assets/{id}` | Get asset details |
+
+### Rental Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/rentals` | Rent an asset |
+| GET | `/api/v1/rentals` | View rental records |
+
+Refer to Swagger UI for the complete endpoint definitions, request parameters, and response schemas.
+
+## Authentication and Authorization
+
+The application uses Spring Security and JWT for authentication.
+
+After a successful login, the application returns a JWT access token.
+
+Include the token in subsequent authenticated requests:
+
+```http
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+Access is controlled using role-based authorization.
+
+Supported roles:
+
+```text
+CUSTOMER
+MERCHANT
+STAFF
+```
+
+Merchant users must be approved before they can access merchant functionality.
+
+## Transaction Integrity and Concurrency Handling
+
+Financial operations require consistency and protection against concurrent updates.
+
+The application implements the following measures:
+
+- `@Transactional` for atomic database operations.
+- `BigDecimal` for monetary calculations.
+- Pessimistic wallet locking using SQL Server `UPDLOCK`.
+- Consistent wallet locking order to reduce deadlocks.
+- Idempotency using transaction references.
+- Balance validation before debiting.
+- Webhook signature verification.
+- Duplicate webhook event detection.
+
+These mechanisms help prevent duplicate processing, inconsistent wallet balances, and concurrent balance update issues.
+
+## Testing the Application
+
+A typical end-to-end test flow is:
+
+1. Register a customer.
+2. Register a merchant.
+3. Log in as staff.
+4. Approve the merchant.
+5. Log in as the customer.
+6. Fund the customer's wallet using the mock bank transfer workflow.
+7. Verify that the wallet has been credited.
+8. Log in as the merchant.
+9. Create a rental asset.
+10. Log in as the customer.
+11. Rent the merchant's asset.
+12. Verify the customer's debit, merchant's credit, and rental record.
+
+Swagger UI can be used to execute and inspect the API requests.
+
+## Current Limitations
+
+The current implementation focuses on registration, wallet operations, bank funding simulation, and asset rental.
+
+The following capabilities are not yet implemented:
+
+- Rental cancellation and refund processing.
+- Asset return and inventory restoration.
+- Merchant wallet withdrawals.
+- Persistent mock bank settlement scheduling across application restarts.
+- JWT refresh tokens and server-side token revocation.
+- Comprehensive automated integration and concurrency tests.
+- Integration with a real banking or payment provider.
+
+The direct wallet funding endpoint is a development shortcut. In a production implementation, wallet funding should only happen after verified payment-provider confirmation.
+
+## Future Improvements
+
+Potential improvements include:
+
+- Double-entry accounting ledger.
+- Automated reconciliation.
+- Merchant settlement and withdrawal workflows.
+- Rental cancellation and refund management.
+- Asset return and maintenance workflows.
+- Payment provider integration.
+- Automated unit, integration, and concurrency tests.
+- Docker-based deployment.
+- Monitoring, audit logging, and observability.
+
+## Security Considerations
+
+- Passwords are hashed using BCrypt.
+- JWT signing keys should be securely configured outside source control.
+- Database credentials should be stored in environment variables or a secrets manager.
+- Webhook signatures are validated before processing.
+- Protected endpoints require authentication and appropriate authorization.
+- Financial operations are executed transactionally.
+
+## Repository
+
+GitHub: https://github.com/domebingonye/rental-management-service
+
+## Author
+
+**Dominic Ebingonye**
+
+Backend Software Engineer | Java | Spring Boot | Fintech Systems
+
